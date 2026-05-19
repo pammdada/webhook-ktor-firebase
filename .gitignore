@@ -1,0 +1,41 @@
+# Gradle
+.gradle/
+build/
+# Gradle Local Configuration
+.gradle-credentials
+gradle-app.setting
+.gradletasknamecache
+local.properties
+
+# Kotlin / IntelliJ
+.idea/
+*.iml
+out/
+
+# Test reports & Code Quality
+/build/
+/out/
+.ktlint/
+htmlReport/
+.sonar/
+.pact/
+
+# IntelliJ specific extensions & datasources
+.idea/dataSources/
+.idea/dataSources.local.xml
+.idea/sqlDataSources.xml
+.idea/shelf/
+.idea/workspace.xml
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local env / secrets
+.env
+.env.*
+
+# Ktor / app artifacts
+firebase-debug.log
