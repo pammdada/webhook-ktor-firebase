@@ -30,12 +30,15 @@ dependencies {
     // Firebase Admin SDK — detección automática de credenciales en Cloud Run (ADC)
     implementation("com.google.firebase:firebase-admin:9.4.3")
 
-    // Cliente HTTP unificado a Ktor 3.4.0 (misma versión que el servidor)
-    implementation(ktorLibs.client.core)
-    implementation(ktorLibs.client.cio)
-    implementation(ktorLibs.client.contentNegotiation)
-    implementation("io.ktor:ktor-serialization-kotlinx-json:3.4.0")
+    // Retrofit + OkHttp + Kotlinx Serialization para llamadas async
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("com.squareup.retrofit2:converter-kotlinx-serialization:2.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+
+    // Ktor server serialization
+    implementation("io.ktor:ktor-serialization-kotlinx-json:3.4.0")
 
     testImplementation(kotlin("test"))
     testImplementation(ktorLibs.server.testHost)

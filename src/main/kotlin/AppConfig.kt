@@ -10,18 +10,11 @@ object AppConfig {
         System.getenv("VERIFY_TOKEN") ?: "dev_token_local"
     }
 
-    val phoneRegistry: Map<String, PhoneData> by lazy {
-        val raw = System.getenv("PHONE_REGISTRY_JSON") ?: "{}"
-        json.decodeFromString<Map<String, PhoneData>>(raw)
+    val accessToken: String by lazy {
+        System.getenv("ACCESS_TOKEN") ?: "dev_access_token_local"
     }
 
     val firebaseDatabaseUrl: String? by lazy {
         System.getenv("FIREBASE_DATABASE_URL")
     }
 }
-
-@Serializable
-data class PhoneData(
-    val token: String,
-    val name: String = ""
-)

@@ -1,0 +1,47 @@
+package com.example
+
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
+
+@Serializable
+data class WhatsAppMessageRequest(
+    val messaging_product: String = "whatsapp",
+    val to: String,
+    val type: String = "text",
+    val text: TextBody
+)
+
+@Serializable
+data class TextBody(
+    val body: String
+)
+
+@Serializable
+data class WhatsAppMessageResponse(
+    val messaging_product: String? = null,
+    val contacts: List<Contact>? = null,
+    val messages: List<Message>? = null
+)
+
+@Serializable
+data class Contact(
+    val wa_id: String? = null
+)
+
+@Serializable
+data class Message(
+    val id: String? = null
+)
+
+@Serializable
+data class PhoneData(
+    val token: String = "",
+    val name: String = "",
+    val phoneNumberId: String = ""
+) {
+    fun toMap(): Map<String, Any?> = mapOf(
+        "token" to token,
+        "name" to name,
+        "phoneNumberId" to phoneNumberId
+    )
+}
