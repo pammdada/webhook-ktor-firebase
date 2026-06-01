@@ -32,7 +32,7 @@ interface WhatsAppApiService {
                 .addInterceptor(logging)
                 .build()
 
-            val json = Json { ignoreUnknownKeys = true }
+            val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
             val retrofit = Retrofit.Builder()
                 .baseUrl(BASE_URL)

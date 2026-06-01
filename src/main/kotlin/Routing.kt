@@ -17,6 +17,9 @@ private val repository = MessageRepository(firebaseService, whatsAppApiService, 
 
 private val log = LoggerFactory.getLogger("com.example.RoutingKt")
 
+
+//
+
 fun Application.configureRouting() {
     retryQueue.start(this)
 
@@ -30,8 +33,16 @@ fun Application.configureRouting() {
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Falta el parámetro 'to'")
 
             val senderId = call.request.queryParameters["from"]
-            val phoneData = senderId?.let { repository.getPhoneData(it) } 
-                ?: firebaseService.getCachedPhoneRegistry().values.firstOrNull()
+            var phoneData: PhoneData? = null
+            if (senderId != null) {
+                phoneData = repository.getPhoneData(senderId)
+                if (phoneData == null) {
+                    phoneData = firebaseService.getPhoneDataDirectly(senderId)
+                }
+            }
+            if (phoneData == null) {
+                phoneData = firebaseService.getCachedPhoneRegistry().values.firstOrNull()
+            }
 
             if (phoneData == null) {
                 return@get call.respond(HttpStatusCode.BadRequest, "No hay emisores registrados.")
@@ -53,6 +64,11 @@ fun Application.configureRouting() {
 
             post {
                 val body = call.receiveText()
+                //val request = call.receive<VoucherInput>()
+
+                log.info("BODY: $body")
+                log.info("BODY A: $body")
+                log.info("BODY B: $body")
                 call.respond(HttpStatusCode.OK) // Respuesta inmediata a Meta
 
                 launch(Dispatchers.IO) {
@@ -65,12 +81,14 @@ fun Application.configureRouting() {
                             ?.get("phone_number_id")?.jsonPrimitive?.content
 
                         if (phoneNumberId != null) {
-                            val phoneData = repository.getPhoneData(phoneNumberId)
-                            if (phoneData != null) {
-                                repository.processWebhook(json, phoneNumberId)
-                            } else {
-                                log.warn("ID $phoneNumberId no registrado en BDD.")
+                            var phoneData = repository.getPhoneData(phoneNumberId)
+                            if (phoneData == null) {
+                                phoneData = firebaseService.getPhoneDataDirectly(phoneNumberId)
                             }
+                            if (phoneData == null) {
+                                log.warn("ID $phoneNumberId no registrado (cache + Firebase). Guardando mensaje sin respuesta.")
+                            }
+                            repository.processWebhook(json, phoneNumberId, phoneData)
                         }
                     } catch (e: Exception) {
                         log.error("Error en segundo plano: ${e.message}")

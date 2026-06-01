@@ -17,7 +17,7 @@ class MessageRepository(
         return firebaseService.getCachedPhoneRegistry()[phoneNumberId]
     }
 
-    suspend fun processWebhook(json: JsonObject, phoneNumberId: String) {
+    suspend fun processWebhook(json: JsonObject, phoneNumberId: String, phoneData: PhoneData?) {
         val value = json["entry"]?.jsonArray?.getOrNull(0)?.jsonObject
             ?.get("changes")?.jsonArray?.getOrNull(0)?.jsonObject
             ?.get("value")?.jsonObject
@@ -39,12 +39,14 @@ class MessageRepository(
                 timestamp = timestamp
             )
 
-            // Guardado inmediato en BDD
+            // Guardado inmediato en BDD (siempre)
             val saved = firebaseService.saveIncoming(incoming)
             if (!saved) retryQueue.enqueue(PendingIncoming(incoming))
 
-            // Enviar respuesta automática
-            sendResponse(from, "¡Hola! Recibimos tu mensaje en nuestro servidor.", phoneNumberId)
+            // Enviar respuesta automática solo si tenemos el registro del emisor
+            if (phoneData != null) {
+                sendResponse(from, "¡Hola! Recibimos tu mensaje en nuestro servidor.", phoneNumberId)
+            }
         }
     }
 
@@ -52,17 +54,23 @@ class MessageRepository(
         log.info("Sending response to $to via $phoneNumberId...")
         
         val status = try {
+            val request = WhatsAppMessageRequest(to = to, text = TextBody(body = text))
+            log.info("WhatsApp request body: messaging_product=${request.messaging_product}, recipient_type=${request.recipient_type}, to=$to, type=${request.type}")
             val response = whatsAppApiService.sendMessage(
                 phoneNumberId = phoneNumberId,
                 authorization = "Bearer ${AppConfig.accessToken}",
-                request = WhatsAppMessageRequest(to = to, text = TextBody(body = text))
+                request = request
             )
-            if (response.isSuccessful) response.code() else {
-                log.error("API Error: ${response.code()} - ${response.errorBody()?.string()}")
+            if (response.isSuccessful) {
+                log.info("Message sent successfully to $to (${response.code()})")
+                response.code()
+            } else {
+                val errorBody = response.errorBody()?.string()
+                log.error("WhatsApp API Error ${response.code()} to=$to phoneNumberId=$phoneNumberId: $errorBody")
                 response.code()
             }
         } catch (e: Exception) {
-            log.error("Critical error sending message: ${e.message}")
+            log.error("Exception sending message to $to phoneNumberId=$phoneNumberId: ${e.message}", e)
             null
         }
 

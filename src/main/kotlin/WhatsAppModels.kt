@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonObject
 @Serializable
 data class WhatsAppMessageRequest(
     val messaging_product: String = "whatsapp",
+    val recipient_type: String = "individual",
     val to: String,
     val type: String = "text",
     val text: TextBody
