@@ -72,3 +72,11 @@ class PendingOutgoing(
     override suspend fun execute(firebase: FirebaseService?): Boolean =
         firebase?.saveOutgoing(msg) ?: false
 }
+
+class PendingWebhookMessage(
+    private val conversationKey: String,
+    private val messageMap: Map<String, Any?>
+) : PendingMessage(id = messageMap["id"] as? String ?: "unknown") {
+    override suspend fun execute(firebase: FirebaseService?): Boolean =
+        firebase?.saveWebhookMessage(conversationKey, messageMap) ?: false
+}

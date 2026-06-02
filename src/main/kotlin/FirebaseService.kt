@@ -132,6 +132,12 @@ class FirebaseService {
         return saved
     }
 
+    suspend fun saveWebhookMessage(conversationKey: String, messageMap: Map<String, Any?>): Boolean {
+        val saved = saveMessage(conversationKey, messageMap)
+        if (saved) log.info("Webhook message saved in conversation with $conversationKey")
+        return saved
+    }
+
     private fun DataSnapshot.toPhoneData(phoneNumberId: String? = null): PhoneData? {
         val id = phoneNumberId ?: this.key ?: return null
         val name = this.child("name").getValue(String::class.java) ?: ""

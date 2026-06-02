@@ -7,7 +7,6 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.*
 import org.slf4j.LoggerFactory
 
 private val firebaseService = FirebaseService()
@@ -54,26 +53,41 @@ fun Application.configureRouting() {
             }
 
             post {
-                val body = call.receiveText()
-                call.respond(HttpStatusCode.OK)
+                try {
+                    // Deserializa automáticamente el JSON del webhook de WhatsApp usando kotlinx.serialization + ContentNegotiation
+                    val payload = call.receive<WebhookPayload>()
+                    // Responde inmediatamente 200 OK a Meta para evitar reintentos (Meta exige respuesta en <20s)
+                    call.respond(HttpStatusCode.OK)
 
-                launch(Dispatchers.IO) {
-                    try {
-                        val json = Json.parseToJsonElement(body).jsonObject
-                        val phoneNumberId = json.extractWebhookValue()
-                            ?.get("metadata")?.jsonObject
-                            ?.get("phone_number_id")?.jsonPrimitive?.content
+                    // Procesamiento asíncrono: guardar en Firebase, responder al usuario
+                    launch(Dispatchers.IO) {
+                        try {
+                            payload.entry.forEach { entry ->
+                                entry.changes.forEach { change ->
+                                    // Extrae el ID del número de teléfono de negocio desde metadata
+                                    val phoneNumberId = change.value.metadata.phoneNumberId
+                                    // Busca token Bearer en caché local → fallback a Firebase RTDB
+                                    val phoneData = repository.resolvePhoneData(phoneNumberId)
 
-                        if (phoneNumberId != null) {
-                            val phoneData = repository.resolvePhoneData(phoneNumberId)
-                            if (phoneData == null) {
-                                log.warn("ID $phoneNumberId no registrado (cache + Firebase). Guardando mensaje sin respuesta.")
+                                    if (phoneData == null) {
+                                        log.warn("ID $phoneNumberId no registrado (cache + Firebase). Guardando mensaje sin respuesta.")
+                                    }
+
+                                    // Itera TODOS los mensajes del array (puede haber varios en un solo webhook)
+                                    change.value.messages?.forEach { message ->
+                                        // Guarda mensaje completo en Firebase y envía respuesta automática
+                                        repository.processWebhookMessage(message, phoneNumberId, phoneData)
+                                    }
+                                }
                             }
-                            repository.processWebhook(json, phoneNumberId, phoneData)
+                        } catch (e: Exception) {
+                            log.error("Error processing webhook: ${e.message}")
                         }
-                    } catch (e: Exception) {
-                        log.error("Error en segundo plano: ${e.message}")
                     }
+                } catch (e: Exception) {
+                    log.error("Error parsing webhook: ${e.message}")
+                    // Si falla el parseo, aún respondemos 200 para que Meta no reintente
+                    call.respond(HttpStatusCode.OK)
                 }
             }
         }

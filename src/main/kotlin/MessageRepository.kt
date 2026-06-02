@@ -1,9 +1,5 @@
 package com.example
 
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
 
 class MessageRepository(
@@ -21,43 +17,30 @@ class MessageRepository(
         return getPhoneData(phoneNumberId) ?: firebaseService.getPhoneDataDirectly(phoneNumberId)
     }
 
-    suspend fun processWebhook(json: JsonObject, phoneNumberId: String, phoneData: PhoneData?) {
-        val value = json.extractWebhookValue()
+    // Guarda el mensaje completo del webhook en Firebase (formato nativo de Meta)
+    suspend fun processWebhookMessage(message: WebhookMessage, phoneNumberId: String, phoneData: PhoneData?) {
+        // Convierte WebhookMessage → Map<String, Any?> usando kotlinx.serialization JSON
+        val messageMap = message.toFirebaseMap()
+        // Guarda en: conversations/{from}/messages/{pushId}/
+        val saved = firebaseService.saveWebhookMessage(message.from, messageMap)
+        // Si falla Firebase, encola para reintento en background cada 30s
+        if (!saved) retryQueue.enqueue(PendingWebhookMessage(message.from, messageMap))
 
-        val messages = value?.get("messages")?.jsonArray
-        if (messages != null && messages.isNotEmpty()) {
-            val msg = messages[0].jsonObject
-            val from = msg["from"]?.jsonPrimitive?.content ?: return
-            val msgBody = msg["text"]?.jsonObject?.get("body")?.jsonPrimitive?.content ?: ""
-            val msgId = msg["id"]?.jsonPrimitive?.content ?: "unknown_${System.currentTimeMillis()}"
-            val rawTs = msg["timestamp"]?.jsonPrimitive?.content
-            val timestamp = (rawTs?.toLongOrNull() ?: System.currentTimeMillis()) * 1000L
-
-            val incoming = IncomingMessage(
-                from = from,
-                to = phoneNumberId,
-                body = msgBody,
-                messageId = msgId,
-                timestamp = timestamp
-            )
-
-            // Guardado inmediato en BDD (siempre)
-            val saved = firebaseService.saveIncoming(incoming)
-            if (!saved) retryQueue.enqueue(PendingIncoming(incoming))
-
-            // Enviar respuesta automática solo si tenemos el registro del emisor
-            if (phoneData != null) {
-                sendResponse(from, "¡Hola! Recibimos tu mensaje en nuestro servidor.", phoneNumberId)
-            }
+        // Respuesta automática solo si tenemos el token del phoneNumberId
+        if (phoneData != null) {
+            sendResponse(message.from, "¡Hola! Recibimos tu mensaje en nuestro servidor.", phoneNumberId)
         }
     }
 
+    // Construye WhatsAppMessageRequest y llama a WhatsApp Cloud API v19.0
     suspend fun sendResponse(to: String, text: String, phoneNumberId: String): Int? {
         log.info("Sending response to $to via $phoneNumberId...")
         
         val status = try {
+            // Formato JSON que exige Meta: messaging_product, recipient_type, to, type, text
             val request = WhatsAppMessageRequest(to = to, text = TextBody(body = text))
             log.info("WhatsApp request body: messaging_product=${request.messaging_product}, recipient_type=${request.recipient_type}, to=$to, type=${request.type}")
+            // POST https://graph.facebook.com/v19.0/{phoneNumberId}/messages con Bearer token
             val response = whatsAppApiService.sendMessage(
                 phoneNumberId = phoneNumberId,
                 authorization = "Bearer ${AppConfig.accessToken}",
@@ -76,6 +59,7 @@ class MessageRepository(
             null
         }
 
+        // Guarda copia de la respuesta enviada en Firebase para auditoría
         val outgoing = OutgoingMessage(
             from = phoneNumberId,
             to = to,
@@ -90,10 +74,4 @@ class MessageRepository(
         
         return status
     }
-}
-
-fun JsonObject.extractWebhookValue(): JsonObject? {
-    return this["entry"]?.jsonArray?.getOrNull(0)?.jsonObject
-        ?.get("changes")?.jsonArray?.getOrNull(0)?.jsonObject
-        ?.get("value")?.jsonObject
 }
