@@ -120,12 +120,6 @@ class FirebaseService {
         false
     }
 
-    suspend fun saveIncoming(msg: IncomingMessage): Boolean {
-        val saved = saveMessage(msg.from, msg.toMap())
-        if (saved) log.info("Incoming message saved in conversation with ${msg.from}")
-        return saved
-    }
-
     suspend fun saveOutgoing(msg: OutgoingMessage): Boolean {
         val saved = saveMessage(msg.to, msg.toMap())
         if (saved) log.info("Outgoing message saved in conversation with ${msg.to}")

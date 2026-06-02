@@ -59,13 +59,6 @@ sealed class PendingMessage(open val id: String, open var retryCount: Int = 0) {
     abstract suspend fun execute(firebase: FirebaseService?): Boolean
 }
 
-class PendingIncoming(
-    private val msg: IncomingMessage
-) : PendingMessage(id = msg.messageId) {
-    override suspend fun execute(firebase: FirebaseService?): Boolean =
-        firebase?.saveIncoming(msg) ?: false
-}
-
 class PendingOutgoing(
     private val msg: OutgoingMessage
 ) : PendingMessage(id = "${msg.to}_${msg.timestamp}") {
