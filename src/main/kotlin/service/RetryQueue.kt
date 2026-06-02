@@ -1,5 +1,6 @@
-package com.example
+package com.example.service
 
+import com.example.OutgoingMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive

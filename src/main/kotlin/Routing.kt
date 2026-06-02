@@ -1,5 +1,11 @@
 package com.example
 
+import com.example.service.FirebaseService
+import com.example.service.MessageRepository
+import com.example.service.RetryQueue
+import com.example.webhook.WebhookPayload
+import com.example.whatsapp.PhoneData
+import com.example.whatsapp.WhatsAppApiService
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
@@ -20,27 +26,6 @@ fun Application.configureRouting() {
     retryQueue.start(this)
 
     routing {
-        get("/") {
-            call.respondText("Ktor WhatsApp Webhook Server is running!")
-        }
-
-        get("/send") {
-            val destinatario = call.request.queryParameters["to"]
-                ?: return@get call.respond(HttpStatusCode.BadRequest, "Falta el parámetro 'to'")
-
-            val senderId = call.request.queryParameters["from"]
-            var phoneData: PhoneData? = if (senderId != null) repository.resolvePhoneData(senderId) else null
-            if (phoneData == null) {
-                phoneData = firebaseService.getCachedPhoneRegistry().values.firstOrNull()
-            }
-
-            if (phoneData == null) {
-                return@get call.respond(HttpStatusCode.BadRequest, "No hay emisores registrados.")
-            }
-
-            val status = repository.sendResponse(destinatario, "¡Hola desde Ktor! 🚀", phoneData.phoneNumberId)
-            call.respond(HttpStatusCode.OK, "Status: $status")
-        }
 
         route("/webhook") {
             get {
@@ -54,39 +39,24 @@ fun Application.configureRouting() {
 
             post {
                 try {
-                    // Deserializa automáticamente el JSON del webhook de WhatsApp usando kotlinx.serialization + ContentNegotiation
+                    // 1. Recibe el payload JSON de Meta y lo deserializa en WebhookPayload (kotlinx.serialization)
                     val payload = call.receive<WebhookPayload>()
-                    // Responde inmediatamente 200 OK a Meta para evitar reintentos (Meta exige respuesta en <20s)
+                    log.info("Webhook POST recibido: object=${payload.obj}, entries=${payload.entry.size}")
+
+                    // 2. Responde 200 OK inmediatamente para que Meta no reintente (timeout < 20s)
                     call.respond(HttpStatusCode.OK)
 
-                    // Procesamiento asíncrono: guardar en Firebase, responder al usuario
+                    // 3. Procesamiento asíncrono en background: guardar raw + mensajes + responder
                     launch(Dispatchers.IO) {
                         try {
-                            payload.entry.forEach { entry ->
-                                entry.changes.forEach { change ->
-                                    // Extrae el ID del número de teléfono de negocio desde metadata
-                                    val phoneNumberId = change.value.metadata.phoneNumberId
-                                    // Busca token Bearer en caché local → fallback a Firebase RTDB
-                                    val phoneData = repository.resolvePhoneData(phoneNumberId)
-
-                                    if (phoneData == null) {
-                                        log.warn("ID $phoneNumberId no registrado (cache + Firebase). Guardando mensaje sin respuesta.")
-                                    }
-
-                                    // Itera TODOS los mensajes del array (puede haber varios en un solo webhook)
-                                    change.value.messages?.forEach { message ->
-                                        // Guarda mensaje completo en Firebase y envía respuesta automática
-                                        repository.processWebhookMessage(message, phoneNumberId, phoneData)
-                                    }
-                                }
-                            }
+                            repository.processWebhookPayload(payload)
                         } catch (e: Exception) {
-                            log.error("Error processing webhook: ${e.message}")
+                            log.error("Error processing webhook: ${e.message}", e)
                         }
                     }
                 } catch (e: Exception) {
-                    log.error("Error parsing webhook: ${e.message}")
-                    // Si falla el parseo, aún respondemos 200 para que Meta no reintente
+                    log.error("Error parsing webhook JSON: ${e.message}")
+                    // Si falla el parseo, igual respondemos 200 para evitar reintentos de Meta
                     call.respond(HttpStatusCode.OK)
                 }
             }

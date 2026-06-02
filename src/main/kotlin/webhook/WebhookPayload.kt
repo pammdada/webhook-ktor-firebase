@@ -1,12 +1,10 @@
-package com.example
+package com.example.webhook
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
-// Raíz del JSON que envía Meta en el webhook
 data class WebhookPayload(
-    // "object" es keyword de Kotlin, por eso se mapea a "obj"
     @SerialName("object") val obj: String,
     val entry: List<WebhookEntry>
 )
@@ -24,7 +22,6 @@ data class WebhookChange(
 )
 
 @Serializable
-// Contiene metadata, contacts, messages[] y statuses[]
 data class WebhookValue(
     @SerialName("messaging_product") val messagingProduct: String,
     val metadata: WebhookMetadata,
@@ -35,7 +32,6 @@ data class WebhookValue(
 
 @Serializable
 data class WebhookMetadata(
-    // display_phone_number = número visible, phone_number_id = ID del negocio
     @SerialName("display_phone_number") val displayPhoneNumber: String,
     @SerialName("phone_number_id") val phoneNumberId: String
 )

@@ -1,4 +1,4 @@
-package com.example
+package com.example.whatsapp
 
 import kotlinx.serialization.Serializable
 

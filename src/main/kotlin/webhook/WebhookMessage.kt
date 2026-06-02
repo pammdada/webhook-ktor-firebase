@@ -1,36 +1,33 @@
-package com.example
+package com.example.webhook
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
-// Representa un mensaje individual del array "messages" que envía Meta
 data class WebhookMessage(
     val from: String,
     val id: String,
     val timestamp: String,
     val type: String,
-    val text: WebhookText? = null,        // Presente solo si type == "text"
-    val image: WebhookImage? = null,       // Presente solo si type == "image". Contiene id, caption, mime_type
-    val audio: WebhookAudio? = null,       // Presente solo si type == "audio". voice=true para notas de voz
-    val video: WebhookVideo? = null,       // Presente solo si type == "video"
-    val document: WebhookDocument? = null, // Presente solo si type == "document". Contiene filename
-    val location: WebhookLocation? = null, // Presente solo si type == "location". latitud/longitud + nombre
-    val contacts: List<WebhookContactDetail>? = null, // Presente solo si type == "contacts"
-    val interactive: WebhookInteractive? = null,      // Botón pulsado o item de lista seleccionado
-    val reaction: WebhookReaction? = null,             // Emoji reacción + message_id del mensaje original
-    val sticker: WebhookSticker? = null,   // Presente solo si type == "sticker"
-    val order: WebhookOrder? = null,       // Presente solo si type == "order"
-    @SerialName("system") val systemContent: WebhookSystemContent? = null, // Presente solo si type == "system"
-    val context: WebhookContext? = null,   // Información de reenvío o respuesta a mensaje previo
+    val text: WebhookText? = null,
+    val image: WebhookImage? = null,
+    val audio: WebhookAudio? = null,
+    val video: WebhookVideo? = null,
+    val document: WebhookDocument? = null,
+    val location: WebhookLocation? = null,
+    val contacts: List<WebhookContactDetail>? = null,
+    val interactive: WebhookInteractive? = null,
+    val reaction: WebhookReaction? = null,
+    val sticker: WebhookSticker? = null,
+    val order: WebhookOrder? = null,
+    @SerialName("system") val systemContent: WebhookSystemContent? = null,
+    val context: WebhookContext? = null,
     val referral: WebhookReferral? = null,
     val errors: List<WebhookError>? = null
 )
 
 @Serializable
-data class WebhookText(
-    val body: String
-)
+data class WebhookText(val body: String)
 
 @Serializable
 data class WebhookImage(
@@ -190,7 +187,6 @@ data class WebhookSystemContent(
 )
 
 @Serializable
-// Información de reenvío o respuesta a mensaje previo
 data class WebhookContext(
     val from: String? = null,
     val id: String? = null,

@@ -1,5 +1,7 @@
-package com.example
+package com.example.service
 
+import com.example.OutgoingMessage
+import com.example.whatsapp.PhoneData
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
@@ -16,14 +18,13 @@ class FirebaseService {
     private val log = LoggerFactory.getLogger(FirebaseService::class.java)
     private val db: DatabaseReference
     
-    // Cache local para acceso instantáneo
     private val phoneRegistryCache = ConcurrentHashMap<String, PhoneData>()
 
     init {
         val optionsBuilder = FirebaseOptions.builder()
             .setCredentials(GoogleCredentials.getApplicationDefault())
 
-        AppConfig.firebaseDatabaseUrl?.let { url ->
+        com.example.AppConfig.firebaseDatabaseUrl?.let { url ->
             optionsBuilder.setDatabaseUrl(url)
             log.info("Using explicit database URL: $url")
         }
@@ -83,8 +84,6 @@ class FirebaseService {
         }
     }
 
-    // Fallback de lectura directa a Firebase RTDB cuando el cache local no tiene el dato
-    // (útil en cold starts de Cloud Run donde el ValueEventListener aún no ha cargado los datos)
     suspend fun getPhoneDataDirectly(phoneNumberId: String): PhoneData? = withContext(Dispatchers.IO) {
         try {
             val completableFuture = CompletableFuture<PhoneData?>()
@@ -106,30 +105,70 @@ class FirebaseService {
         }
     }
 
-    private suspend fun saveMessage(conversationKey: String, data: Map<String, Any?>): Boolean = try {
+    // Guarda cada mensaje individual bajo conversations/{key}/messages/<pushId>/
+    // data = mapa del mensaje (WebhookMessage.toFirebaseMap())
+    private suspend fun saveMessage(conversationKey: String, data: Map<String, Any?>): String? = try {
         withContext(Dispatchers.IO) {
-            db.child("conversations")
+            val ref = db.child("conversations")
                 .child(conversationKey)
                 .child("messages")
                 .push()
-                .setValueAsync(data).get()
+            ref.setValueAsync(data).get()
+            ref.key
+        }
+    } catch (e: Exception) {
+        log.error("Failed to save message for $conversationKey: ${e.message}")
+        null
+    }
+
+    // Guarda el webhook completo tal cual lo recibió Meta en rawWebhookPayloads/<pushId>/
+    // payloadMap = WebhookPayload.toFirebaseMap() (contiene entry[], changes[], messages[], metadata, etc.)
+    suspend fun saveRawWebhookPayload(payloadMap: Map<String, Any?>): Boolean = try {
+        withContext(Dispatchers.IO) {
+            val ref = db.child("rawWebhookPayloads").push()
+            ref.setValueAsync(payloadMap).get()
+            val key = ref.key
+            log.info("Raw webhook payload saved → rawWebhookPayloads/$key")
         }
         true
     } catch (e: Exception) {
-        log.error("Failed to save message for $conversationKey: ${e.message}")
+        log.error("Failed to save raw webhook payload: ${e.message}")
         false
     }
 
-    suspend fun saveOutgoing(msg: OutgoingMessage): Boolean {
-        val saved = saveMessage(msg.to, msg.toMap())
-        if (saved) log.info("Outgoing message saved in conversation with ${msg.to}")
-        return saved
+    // Guarda la request exacta que se envía a WhatsApp Cloud API en conversations/{key}/outgoingRequests/<pushId>/
+    // requestMap = WhatsAppMessageRequest.toFirebaseMap() (messaging_product, recipient_type, to, type, text.body)
+    suspend fun saveOutgoingRequest(conversationKey: String, requestMap: Map<String, Any?>): Boolean = try {
+        withContext(Dispatchers.IO) {
+            val ref = db.child("conversations")
+                .child(conversationKey)
+                .child("outgoingRequests")
+                .push()
+            ref.setValueAsync(requestMap).get()
+            val key = ref.key
+            log.info("Outgoing request saved → conversations/$conversationKey/outgoingRequests/$key")
+        }
+        true
+    } catch (e: Exception) {
+        log.error("Failed to save outgoing request for $conversationKey: ${e.message}")
+        false
     }
 
+    // Guarda resumen de la respuesta enviada (OutgoingMessage) bajo conversations/{key}/messages/<pushId>/
+    suspend fun saveOutgoing(msg: OutgoingMessage): Boolean {
+        val key = saveMessage(msg.to, msg.toMap())
+        if (key != null) log.info("Outgoing message saved → conversations/${msg.to}/messages/$key")
+        else log.error("Failed to save outgoing message for ${msg.to}")
+        return key != null
+    }
+
+    // Guarda cada mensaje del webhook (WebhookMessage) bajo conversations/{key}/messages/<pushId>/
+    // messageMap = WebhookMessage.toFirebaseMap() (from, id, timestamp, type, text.body, image, etc.)
     suspend fun saveWebhookMessage(conversationKey: String, messageMap: Map<String, Any?>): Boolean {
-        val saved = saveMessage(conversationKey, messageMap)
-        if (saved) log.info("Webhook message saved in conversation with $conversationKey")
-        return saved
+        val key = saveMessage(conversationKey, messageMap)
+        if (key != null) log.info("Webhook message saved → conversations/$conversationKey/messages/$key")
+        else log.error("Failed to save webhook message for $conversationKey")
+        return key != null
     }
 
     private fun DataSnapshot.toPhoneData(phoneNumberId: String? = null): PhoneData? {
