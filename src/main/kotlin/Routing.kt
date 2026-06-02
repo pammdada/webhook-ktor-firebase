@@ -17,9 +17,6 @@ private val repository = MessageRepository(firebaseService, whatsAppApiService, 
 
 private val log = LoggerFactory.getLogger("com.example.RoutingKt")
 
-
-//
-
 fun Application.configureRouting() {
     retryQueue.start(this)
 
@@ -33,13 +30,7 @@ fun Application.configureRouting() {
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Falta el parámetro 'to'")
 
             val senderId = call.request.queryParameters["from"]
-            var phoneData: PhoneData? = null
-            if (senderId != null) {
-                phoneData = repository.getPhoneData(senderId)
-                if (phoneData == null) {
-                    phoneData = firebaseService.getPhoneDataDirectly(senderId)
-                }
-            }
+            var phoneData: PhoneData? = if (senderId != null) repository.resolvePhoneData(senderId) else null
             if (phoneData == null) {
                 phoneData = firebaseService.getCachedPhoneRegistry().values.firstOrNull()
             }
@@ -64,27 +55,17 @@ fun Application.configureRouting() {
 
             post {
                 val body = call.receiveText()
-                //val request = call.receive<VoucherInput>()
-
-                log.info("BODY: $body")
-                log.info("BODY A: $body")
-                log.info("BODY B: $body")
-                call.respond(HttpStatusCode.OK) // Respuesta inmediata a Meta
+                call.respond(HttpStatusCode.OK)
 
                 launch(Dispatchers.IO) {
                     try {
                         val json = Json.parseToJsonElement(body).jsonObject
-                        val phoneNumberId = json["entry"]?.jsonArray?.getOrNull(0)?.jsonObject
-                            ?.get("changes")?.jsonArray?.getOrNull(0)?.jsonObject
-                            ?.get("value")?.jsonObject
+                        val phoneNumberId = json.extractWebhookValue()
                             ?.get("metadata")?.jsonObject
                             ?.get("phone_number_id")?.jsonPrimitive?.content
 
                         if (phoneNumberId != null) {
-                            var phoneData = repository.getPhoneData(phoneNumberId)
-                            if (phoneData == null) {
-                                phoneData = firebaseService.getPhoneDataDirectly(phoneNumberId)
-                            }
+                            val phoneData = repository.resolvePhoneData(phoneNumberId)
                             if (phoneData == null) {
                                 log.warn("ID $phoneNumberId no registrado (cache + Firebase). Guardando mensaje sin respuesta.")
                             }

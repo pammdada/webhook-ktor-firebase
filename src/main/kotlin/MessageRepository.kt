@@ -17,10 +17,12 @@ class MessageRepository(
         return firebaseService.getCachedPhoneRegistry()[phoneNumberId]
     }
 
+    suspend fun resolvePhoneData(phoneNumberId: String): PhoneData? {
+        return getPhoneData(phoneNumberId) ?: firebaseService.getPhoneDataDirectly(phoneNumberId)
+    }
+
     suspend fun processWebhook(json: JsonObject, phoneNumberId: String, phoneData: PhoneData?) {
-        val value = json["entry"]?.jsonArray?.getOrNull(0)?.jsonObject
-            ?.get("changes")?.jsonArray?.getOrNull(0)?.jsonObject
-            ?.get("value")?.jsonObject
+        val value = json.extractWebhookValue()
 
         val messages = value?.get("messages")?.jsonArray
         if (messages != null && messages.isNotEmpty()) {
@@ -88,4 +90,10 @@ class MessageRepository(
         
         return status
     }
+}
+
+fun JsonObject.extractWebhookValue(): JsonObject? {
+    return this["entry"]?.jsonArray?.getOrNull(0)?.jsonObject
+        ?.get("changes")?.jsonArray?.getOrNull(0)?.jsonObject
+        ?.get("value")?.jsonObject
 }

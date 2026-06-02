@@ -1,7 +1,6 @@
 package com.example
 
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonObject
 
 @Serializable
 data class WhatsAppMessageRequest(
@@ -39,10 +38,4 @@ data class PhoneData(
     val token: String = "",
     val name: String = "",
     val phoneNumberId: String = ""
-) {
-    fun toMap(): Map<String, Any?> = mapOf(
-        "token" to token,
-        "name" to name,
-        "phoneNumberId" to phoneNumberId
-    )
-}
+)

@@ -43,10 +43,7 @@ class FirebaseService {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val newRegistry = mutableMapOf<String, PhoneData>()
                 snapshot.children.forEach { child ->
-                    val phoneNumberId = child.key ?: return@forEach
-                    val name = child.child("name").getValue(String::class.java) ?: ""
-                    val token = child.child("token").getValue(String::class.java) ?: ""
-                    newRegistry[phoneNumberId] = PhoneData(token = token, name = name, phoneNumberId = phoneNumberId)
+                    child.toPhoneData()?.let { newRegistry[it.phoneNumberId] = it }
                 }
                 phoneRegistryCache.clear()
                 phoneRegistryCache.putAll(newRegistry)
@@ -67,10 +64,7 @@ class FirebaseService {
             db.child("phoneRegistry").addListenerForSingleValueEvent(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     snapshot.children.forEach { child ->
-                        val phoneNumberId = child.key ?: return@forEach
-                        val name = child.child("name").getValue(String::class.java) ?: ""
-                        val token = child.child("token").getValue(String::class.java) ?: ""
-                        phoneRegistryCache[phoneNumberId] = PhoneData(token = token, name = name, phoneNumberId = phoneNumberId)
+                        child.toPhoneData()?.let { phoneRegistryCache[it.phoneNumberId] = it }
                     }
                     log.info("Phone registry preloaded (blocking): ${phoneRegistryCache.size} entries")
                     latch.countDown()
@@ -97,13 +91,7 @@ class FirebaseService {
             db.child("phoneRegistry").child(phoneNumberId)
                 .addListenerForSingleValueEvent(object : ValueEventListener {
                     override fun onDataChange(snapshot: DataSnapshot) {
-                        if (snapshot.exists()) {
-                            val name = snapshot.child("name").getValue(String::class.java) ?: ""
-                            val token = snapshot.child("token").getValue(String::class.java) ?: ""
-                            completableFuture.complete(PhoneData(token = token, name = name, phoneNumberId = phoneNumberId))
-                        } else {
-                            completableFuture.complete(null)
-                        }
+                        completableFuture.complete(snapshot.toPhoneData(phoneNumberId))
                     }
 
                     override fun onCancelled(error: DatabaseError) {
@@ -118,35 +106,36 @@ class FirebaseService {
         }
     }
 
-    suspend fun saveIncoming(msg: IncomingMessage): Boolean = try {
+    private suspend fun saveMessage(conversationKey: String, data: Map<String, Any?>): Boolean = try {
         withContext(Dispatchers.IO) {
-            // Esquema: conversations/{customerPhone}/messages/{msgId}
             db.child("conversations")
-              .child(msg.from)
-              .child("messages")
-              .push()
-              .setValueAsync(msg.toMap()).get()
+                .child(conversationKey)
+                .child("messages")
+                .push()
+                .setValueAsync(data).get()
         }
-        log.info("Incoming message saved in conversation with ${msg.from}")
         true
     } catch (e: Exception) {
-        log.error("Failed to save incoming message: ${e.message}")
+        log.error("Failed to save message for $conversationKey: ${e.message}")
         false
     }
 
-    suspend fun saveOutgoing(msg: OutgoingMessage): Boolean = try {
-        withContext(Dispatchers.IO) {
-            // Esquema: conversations/{customerPhone}/messages/{msgId}
-            db.child("conversations")
-              .child(msg.to)
-              .child("messages")
-              .push()
-              .setValueAsync(msg.toMap()).get()
-        }
-        log.info("Outgoing message saved in conversation with ${msg.to}")
-        true
-    } catch (e: Exception) {
-        log.error("Failed to save outgoing message: ${e.message}")
-        false
+    suspend fun saveIncoming(msg: IncomingMessage): Boolean {
+        val saved = saveMessage(msg.from, msg.toMap())
+        if (saved) log.info("Incoming message saved in conversation with ${msg.from}")
+        return saved
+    }
+
+    suspend fun saveOutgoing(msg: OutgoingMessage): Boolean {
+        val saved = saveMessage(msg.to, msg.toMap())
+        if (saved) log.info("Outgoing message saved in conversation with ${msg.to}")
+        return saved
+    }
+
+    private fun DataSnapshot.toPhoneData(phoneNumberId: String? = null): PhoneData? {
+        val id = phoneNumberId ?: this.key ?: return null
+        val name = this.child("name").getValue(String::class.java) ?: ""
+        val token = this.child("token").getValue(String::class.java) ?: ""
+        return PhoneData(token = token, name = name, phoneNumberId = id)
     }
 }
