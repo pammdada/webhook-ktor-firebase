@@ -27,16 +27,32 @@ class MessageRepository(
         return getPhoneData(phoneNumberId) ?: firebaseService.getPhoneDataDirectly(phoneNumberId)
     }
 
-    // Recibe el payload completo del webhook de Meta (object + entry[] + changes[] + value + messages[])
-    // Lo guarda completo (raw) y luego procesa cada mensaje individual
-    suspend fun processWebhookPayload(payload: WebhookPayload) {
-        log.info("Webhook recibido: object=${payload.obj}, entries=${payload.entry.size}")
+    private fun WebhookPayload.clean(): WebhookPayload? {
+        val cleanedEntries = entry.mapNotNull { entry ->
+            val cleanedChanges = entry.changes.mapNotNull { change ->
+                if (change.value.messages.isNullOrEmpty()) null
+                else change.copy(value = change.value.copy(statuses = null))
+            }
+            if (cleanedChanges.isEmpty()) null
+            else entry.copy(changes = cleanedChanges)
+        }
+        if (cleanedEntries.isEmpty()) return null
+        return copy(entry = cleanedEntries)
+    }
 
-        // Guarda el payload completo tal cual llegó de Meta en rawWebhookPayloads/<pushId>/
-        val rawPayloadMap = payload.toFirebaseMap()
+    suspend fun processWebhookPayload(payload: WebhookPayload) {
+        val cleaned = payload.clean()
+            ?: run {
+                log.info("Payload ignored: no messages found (status-only or empty)")
+                return
+            }
+
+        log.info("Webhook recibido: object=${cleaned.obj}, entries=${cleaned.entry.size} (filtered from ${payload.entry.size})")
+
+        val rawPayloadMap = cleaned.toFirebaseMap()
         firebaseService.saveRawWebhookPayload(rawPayloadMap)
 
-        payload.entry.forEach { entry ->
+        cleaned.entry.forEach { entry ->
             entry.changes.forEach { change ->
                 val phoneNumberId = change.value.metadata.phoneNumberId
                 val phoneData = resolvePhoneData(phoneNumberId)
