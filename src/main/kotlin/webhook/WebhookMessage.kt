@@ -34,7 +34,8 @@ data class WebhookImage(
     val id: String,
     @SerialName("mime_type") val mimeType: String? = null,
     val sha256: String? = null,
-    val caption: String? = null
+    val caption: String? = null,
+    val url: String? = null
 )
 
 @Serializable
@@ -42,7 +43,8 @@ data class WebhookAudio(
     val id: String,
     @SerialName("mime_type") val mimeType: String? = null,
     val sha256: String? = null,
-    val voice: Boolean? = null
+    val voice: Boolean? = null,
+    val url: String? = null
 )
 
 @Serializable
@@ -50,7 +52,9 @@ data class WebhookVideo(
     val id: String,
     @SerialName("mime_type") val mimeType: String? = null,
     val sha256: String? = null,
-    val caption: String? = null
+    val caption: String? = null,
+    val url: String? = null,
+    @SerialName("static_url") val staticUrl: String? = null
 )
 
 @Serializable
@@ -59,7 +63,8 @@ data class WebhookDocument(
     @SerialName("mime_type") val mimeType: String? = null,
     val sha256: String? = null,
     val caption: String? = null,
-    val filename: String
+    val filename: String,
+    val url: String? = null
 )
 
 @Serializable
@@ -160,7 +165,8 @@ data class WebhookSticker(
     val id: String,
     @SerialName("mime_type") val mimeType: String? = null,
     val sha256: String? = null,
-    val animated: Boolean? = null
+    val animated: Boolean? = null,
+    val url: String? = null
 )
 
 @Serializable
